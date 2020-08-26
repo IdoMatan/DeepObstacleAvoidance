@@ -6,78 +6,52 @@ from utils import *
 from vehicles import Car, Drone
 
 
-def play_game(logger, uuid, pos=(0, 0, -1), goal=(120, 35), uav_size=(0.29*3, 0.98*2), hfov = radians(90), coll_thres=5, yaw=0,
+def play_game(logger, uuid, pos=(0, 0, -1), goal=(120, 35), uav_size=(0.29*3, 0.98*2), hfov=radians(90), coll_thres=5, yaw=0,
               limit_yaw=5, step=0.1):
 
     # -- create episode and vehicle objects --------
     episode = Episode(uuid, logger)
 
-    drone = Drone()
-    car = Car()
+    lead_drone = Drone(name='Drone1', mode='leader', uav_size=uav_size)
+    follower_drone = Drone(name='Drone2', mode='follower')
 
     # --- Plan path to goal -------------------------------------------------------------------------------------
-    topview, filename = get_topview_image(190, drone=drone)
+    topview, filename = get_topview_image(190, drone=lead_drone)
     obstacles = PathPlanningObstacles(filename, proportion_x=1.6, proportion_y=1.6)
     goals, planner = path_planning(obstacles=obstacles, topview=topview, x_goal=goal, x_init=pos[:2])
 
     # --- send vehicle and drone to initial positions (random at each game/episode) ------------------------------
-    drone.move(pos, yaw)
-    car.move(pos, yaw)
-
-    # ------------------------------------------------------------------------------------------------------------
-    env = Environment(init_pose=pos, drone=drone, car=car, planner=planner, goals=goals)
-
-    state = env.reset(pos, yaw)
-    print('Init state:', state)
+    lead_drone.move(pos, yaw)
+    follower_drone.move(pos, yaw)
 
     # --- Load models -------------------------------------------------------------------------------------------
 
-    trainer = Trainer(env)
-    a2c, optimizer = trainer.load_a2c()
+    # trainer = Trainer(env)
+    # a2c, optimizer = trainer.load_a2c()
 
     # --- Start Game ---------------------------------------------------------------------------------------------
-    total_entropy = 0
-    limit = 30
-    count_down = 10
-    done = False
+    limit = 1200
+    dt = 0
+    goal = goals.pop(0)
+    lead_drone.predictControl = AvoidLeft(hfov, coll_thres, yaw, limit_yaw, step)
+    follower_drone.leader = lead_drone
+    pos = list(pos)
+    while len(goals) and dt < limit:
+            # get response
+            pos, yaw, target_dist = lead_drone.step(goal, pos)
 
-    while (len(env.goals) or count_down) and env.dt < limit:
+            follower_drone.follow(pos, yaw)
+            follower_drone.save_leading_pic()
+            dt += 1
 
-        value, policy_dist = a2c.forward(state)   # each a vector of size n_actions (i.e. 10 for now)
+            if target_dist < 1:
+                print('Target reached.')
+                if not len(goals):
+                    break
+                goal = goals.pop(0)
+                dt = 0
 
-        value = value.detach().numpy()[0, 0]
-        distribution = policy_dist.detach().numpy()
-
-        action = np.random.choice(env.action_space.n, p=np.squeeze(distribution))  # weighted choosing based on output
-        log_prob = torch.log(policy_dist.squeeze(0)[action])
-        entropy = -np.sum(np.mean(distribution) * np.log(distribution))
-        total_entropy +=entropy
-
-        print('Action taken:', action)
-        new_state, reward, done, _ = env.step(env.action_space.action(action), delay=1)
-
-        episode.add_experience(Experience(state, action, reward, new_state, value, log_prob, episode.uuid))
-
-        if done:
-            print('Target reached.')
-            episode.logger.info('target_reached')
-            count_down -= 1
-            if not count_down:
-                break
-
-        state = new_state
-
-    # --- Game ended, running training cycle  -------------------------------------------------------------------
-
-    if done:
-        print('Drone Reached Final Target')
-        episode.logger.info('final_target_reached')
-
-    print('Running training phase')
-    trainer.train(episode, state, total_entropy)
-    trainer.save_model()
-
-    # drone.client.simSetVehiclePose(airsim.Pose(airsim.Vector3r(0, 0, 0), airsim.to_quaternion(0, 0, 0)), True)
+    # --- Game ended -----------------------------------------------------------------------------------
 
 
 # ---- MAIN ---------------------------------------------------------

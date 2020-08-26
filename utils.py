@@ -41,8 +41,9 @@ class AvoidLeft(AbstractClassGetNextVec):
         self.limit_yaw = limit_yaw
         self.step = step
 
-    def get_next_vec(self, depth, obj_sz, goal, pos, img2d):
-        [h, w] = np.shape(depth)
+
+    def get_next_vec(self, img2d, obj_sz, goal, pos):
+        [h, w] = np.shape(img2d)
         [roi_h, roi_w] = compute_bb((h, w), obj_sz, self.hfov, self.coll_thres)
 
         # compute vector, distance and angle to goal
@@ -142,7 +143,6 @@ def generate_contrast_viz(img, surface=0):
     else:
         img = np.reciprocal(img)
     return img
-
 
 
 def plot_depth_cam(img, max_depth=20):
@@ -267,3 +267,25 @@ def setup_logger(name, dir_name, log_file, level=logging.INFO):
 
     return logger
 
+
+def bounding_box(depth_img2d, th=5):
+    depth_img2d[depth_img2d < th] = 1
+    depth_img2d[depth_img2d > th] = 0
+
+    bb_index = np.where(depth_img2d == 1)
+    x_min_bb = np.min(bb_index[0])
+    x_max_bb = np.max(bb_index[0])
+    y_min_bb = np.min(bb_index[1])
+    y_max_bb = np.max(bb_index[1])
+    return x_min_bb, x_max_bb, y_min_bb, y_max_bb
+
+
+def prepare_for_yolo(x_min_bb, x_max_bb, y_min_bb, y_max_bb, label_idx=0, filename='1.txt'):
+    label_idx = label_idx
+    x_center = np.mean([x_min_bb, x_max_bb]) / 256
+    y_center = np.mean([y_min_bb, y_max_bb]) / 144
+    width = x_max_bb - x_min_bb
+    height = y_max_bb - y_min_bb
+    with open(filename, 'w') as file:
+        file.write(f'{label_idx} {x_center} {y_center} {width} {height}')
+    return x_center, y_center, width, height
