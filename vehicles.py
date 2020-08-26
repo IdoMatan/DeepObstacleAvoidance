@@ -104,7 +104,7 @@ class Drone:
         self.yaws.append(yaw)
         self.move(self.poses.pop(0), self.yaws.pop(0))
 
-    def save_leading_pic(self):
+    def save_leader_pic(self, plot_bb=False):
         filename = str(int(np.floor(time.time())))
         depth_img2d = self.get_img2d()
         img2d = self.get_img2d_scene()
@@ -114,16 +114,16 @@ class Drone:
             if 2 < (x_max - x_min) < img2d.shape[1] and 2 < (y_max - y_min) < img2d.shape[0]:
                 prepare_for_yolo(x_min, x_max, y_min, y_max, filename='./yolo_data/' + filename + '.txt')
                 imageio.imwrite(os.path.normpath(os.path.join('./yolo_data/' + filename + '.jpg')), img2d)
+                if plot_bb:
+                    import matplotlib.pyplot as plt
+                    fig, ax = plt.subplots(1)
+                    ax.imshow(img2d)
+                    # x_min, x_max, y_min, y_max = bounding_box(self.get_img2d())
+                    import matplotlib.patches as patches
+                    rect = patches.Rectangle((y_min, x_min), y_max-y_min, x_max-x_min, linewidth=1, edgecolor='r', facecolor='none')
+                    ax.add_patch(rect)
 
-                import matplotlib.pyplot as plt
-                fig, ax = plt.subplots(1)
-                ax.imshow(img2d)
-                # x_min, x_max, y_min, y_max = bounding_box(self.get_img2d())
-                import matplotlib.patches as patches
-                rect = patches.Rectangle((y_min, x_min), y_max-y_min, x_max-x_min, linewidth=1, edgecolor='r', facecolor='none')
-                ax.add_patch(rect)
-
-                plt.show()
+                    plt.show()
 
 class Car:
     def __init__(self, name='Car1'):

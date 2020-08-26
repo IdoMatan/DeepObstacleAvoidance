@@ -41,7 +41,7 @@ def play_game(logger, uuid, pos=(0, 0, -1), goal=(120, 35), uav_size=(0.29*3, 0.
             pos, yaw, target_dist = lead_drone.step(goal, pos)
 
             follower_drone.follow(pos, yaw)
-            follower_drone.save_leading_pic()
+            follower_drone.save_leader_pic()
             dt += 1
 
             if target_dist < 1:
